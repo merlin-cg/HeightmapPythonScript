@@ -3,7 +3,7 @@ import random
 
 
 
-cmds.polyPlane()
+cmds.polyPlane(IHateGit)
 
 
 
