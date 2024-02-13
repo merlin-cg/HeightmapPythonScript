@@ -6,8 +6,8 @@ from opensimplex import OpenSimplex
 import math
 
 # Heightmap size
-width = 128
-height = 128
+width = 512
+height = 512
 
 
 """
@@ -15,7 +15,7 @@ STEP 1: CREATE A HEIGHTMAP USING PERLIN NOISE
 """
 
 
-def create_heightmap(width: int, height: int, scale: float = 32.0, seed: int = 42):
+def create_heightmap(width: int, height: int, scale: float = 256.0, seed: int = 42):
     # Create a 2D array of floats
     heightmap = np.zeros((width, height), dtype=float)
 
@@ -25,18 +25,20 @@ def create_heightmap(width: int, height: int, scale: float = 32.0, seed: int = 4
     # Generate Perlin noise and assign it to the heightmap
     for i in range(height):
         for j in range(width):
-            heightmap[i][j] = noise_generator.noise2(i / scale, j / scale)
-            heightmap[i][j] += noise_generator.noise2(i / scale / 2, j / scale / 2) * 0.5
-            heightmap[i][j] += noise_generator.noise2(i / (scale / 4), j / (scale / 4)) * 0.25
-            heightmap[i][j] += noise_generator.noise2(i / (scale / 8), j / (scale / 8)) * 0.125
-            heightmap[i][j] += noise_generator.noise2(i / (scale / 16), j / (scale / 16)) * 0.0625
-            heightmap[i][j] += noise_generator.noise2(i / (scale / 32), j / (scale / 32)) * 0.03125
+            # Generate multiple octaves of noise
+            for octave in range(6):  # Adjust the number of octaves as needed
+                frequency = 2 ** octave
+                amplitude = 1 / frequency
+                heightmap[i][j] += (1 - abs(noise_generator.noise2(i / scale * frequency, j / scale * frequency))) * amplitude
+
+
 
     # Normalize the heightmap to the range [0, 1]
     heightmap -= heightmap.min()
     heightmap /= heightmap.max()
 
-
+    # Invert the heightmap values to create ridges at high values
+    heightmap = 1 - heightmap
 
     return heightmap
 

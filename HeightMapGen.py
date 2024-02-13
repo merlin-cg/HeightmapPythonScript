@@ -60,3 +60,6 @@ cmds.connectAttr(displacement_node + '.displacement', shading_group + '.displace
 # Assign shading_group to plane
 plane_shape = cmds.listRelatives(plane, shapes=True)[0]
 cmds.sets(plane_shape, edit=True, forceElement=shading_group)
+
+cmds.toggleDisplacement(plane)
+cmds.displacementToPoly(plane)
