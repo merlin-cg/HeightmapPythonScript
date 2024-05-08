@@ -25,12 +25,14 @@ class UI:
         
         #fields
         self.scale_field = cmds.intFieldGrp(numberOfFields=2, label='Dimensions', value1=1080, value2=1080)
+        self.octave_field = cmds.intFieldGrp(numberOfFields=2, label='Base & Detail Octaves', value1=4, value2=10)
         self.seed_field = cmds.intFieldGrp(numberOfFields=1, label='Seed', value1=56456)
         self.noise_scale_field = cmds.floatFieldGrp(numberOfFields=1, label='Noise Scale', value1=1024.0)
         self.disp_scale_field = cmds.floatFieldGrp(numberOfFields=1, label='Height Scale', value1=3.0)
         self.ABS_control_field = cmds.floatFieldGrp(numberOfFields=2, label='ABS control', value1=1.1, value2=1.0)
         self.slope_control_field = cmds.floatFieldGrp(numberOfFields=1, label='Slope', value1=0.25)
-
+        
+        
         cmds.button (label='Generate Terrain', command=self.generate_terrain_btn_active)
         
         
@@ -39,6 +41,9 @@ class UI:
     def generate_terrain_btn_active(self, *args):
         width = cmds.intFieldGrp(self.scale_field, query=True, value=True)[0]
         height = cmds.intFieldGrp(self.scale_field, query=True, value=True)[1]
+        baseOctaves = cmds.intFieldGrp(self.octave_field, query=True, value=True)[0]
+        detailOctaves = cmds.intFieldGrp(self.octave_field, query=True, value=True)[1]
+
         
         seed = cmds.intFieldGrp(self.seed_field, query=True, value=True)[0]
         noiseScale = cmds.floatFieldGrp(self.noise_scale_field, query=True, value=True)[0]
@@ -49,11 +54,12 @@ class UI:
         
         slopeCtrl = cmds.floatFieldGrp(self.slope_control_field, query=True, value=True)[0]
         
-        Terrain(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl)
+        Terrain(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves)
+        
         
         
 class Terrain:
-    def __init__(self, width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl):
+    def __init__(self, width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves):
         self.width = width
         self.height = height
         self.seed = seed
@@ -62,7 +68,9 @@ class Terrain:
         self.baseABS = baseABS
         self.detailABS = detailABS
         self.slopeCtrl = slopeCtrl
-        self.heightmap = self.create_heightmap(self.width, self.height, self.seed, self.noiseScale, self.baseABS, self.detailABS, self.slopeCtrl)
+        self.baseOctaves = baseOctaves
+        self.detailOctaves = detailOctaves
+        self.heightmap = self.create_heightmap(self.width, self.height, self.seed, self.noiseScale, self.baseABS, self.detailABS, self.slopeCtrl, self.baseOctaves, self.detailOctaves)
 
 
        # plt.figure(figsize=(width / 100, height / 100)) 
@@ -78,8 +86,6 @@ class Terrain:
         
     # for stuff outside 
     def create_heightmap(self, width, height, seed, noiseScale, baseABS, detailABS, slopeCtrl):
-
-        self.absAmount = 1.4
         
         # Create a Perlin noise object
         noise_generator = OpenSimplex(seed=self.seed)
@@ -90,7 +96,7 @@ class Terrain:
         for i in range(height):
             for j in range(width):
                 # Generate multiple octaves of noise
-                for octave in range(4):  # Adjust the number of octaves as needed
+                for octave in range(self.baseOctaves):  # Adjust the number of octaves as needed
                     frequency = 2 ** octave
                     amplitude = 1 / frequency
                     heightmap[i][j] += (1 - abs(noise_generator.noise2(i / self.noiseScale * frequency, j / self.noiseScale * frequency))** baseABS) * amplitude
@@ -102,7 +108,7 @@ class Terrain:
         detail_noise = np.zeros((width, height), dtype=float)
         for i in range(height):
             for j in range(width):
-                for octave in range(4, 10):  # Fine detail octaves
+                for octave in range(self.baseOctaves, self.detailOctaves):  # Fine detail octaves
                     frequency = 2 ** octave
                     amplitude = 2 / frequency
                     detail_noise[i][j] += (1 - abs(noise_generator.noise2(i / self.noiseScale * frequency, j / self.noiseScale * frequency))** detailABS) * amplitude
