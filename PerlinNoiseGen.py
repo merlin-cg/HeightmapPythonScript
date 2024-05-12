@@ -9,6 +9,7 @@ import math
 import platform
 import OpenEXR, Imath
 from scipy.ndimage import gaussian_filter
+from configparser import ConfigParser
 
 
 class UI:
@@ -19,13 +20,18 @@ class UI:
         size = (720, 540)
         self.plane = None
         
+        self.config_selection = cmds.optionMenu(label='Choose config', changeCommand=self.update_active_section)
+        self.config = ConfigParser()
+        self.config_file_path = "/home/s5609424/Programming/HeightmapPythonScript/config.ini"
+        self.active_section = None
+        
         if cmds.window(window, exists=True):
             cmds.deleteUI(window, window=True)
             
-        #creat ui    
+        #create ui    
         window = cmds.window(window, title=title,widthHeight=size)
         main_layout = cmds.columnLayout(adjustableColumn=True)
-        
+                
         #fields
         self.scale_field = cmds.intFieldGrp(numberOfFields=2, label='Dimensions', value1=400, value2=400)
         self.octave_field = cmds.intFieldGrp(numberOfFields=2, label='Base & Detail Octaves', value1=4, value2=10)
@@ -34,18 +40,92 @@ class UI:
         self.disp_scale_field = cmds.floatFieldGrp(numberOfFields=1, label='Height Scale', value1=3.0)
         self.ABS_control_field = cmds.floatFieldGrp(numberOfFields=2, label='ABS control', value1=1.1, value2=1.0)
         self.slope_control_field = cmds.floatFieldGrp(numberOfFields=1, label='Slope', value1=0.25)        
-        self.feathering_toggle = cmds.checkBox(label='Feathering')
+        self.feathering_toggle = cmds.checkBox(label='Feathering', value=True)
         self.feathering_amount = cmds.intFieldGrp(numberOfFields=1, label='Feathering Amount', value1=50)
+        self.config_selection = cmds.optionMenu(label='Choose config')
+        
+        self.config.read([self.config_file_path]) 
 
-        
-        
+        for section in self.config.sections():
+            cmds.menuItem(label=section, parent=self.config_selection) 
+            
+
+        cmds.button(label='Load Config', command=self.load_config_btn_active)
+        cmds.button(label='Write Config', command=self.write_config_btn_active)
+
         cmds.button(label='Generate Terrain', command=self.generate_terrain_btn_active)
         cmds.button(label='Edit Heightmap', command=self.edit_heightmap_btn_active)
 
-        # Create the falloff curve UI element
         cmds.showWindow()  
+            
+    def load_config_btn_active(self, config_file_path):
+        config = ConfigParser()
+
+        print(self.config_file_path)
+        if config.has_section(selected_config):
+            parameters = {
+                'width': config.getint('Alps', 'width'),
+                'height': config.getint('Alps', 'height'),
+                'base_octaves': config.getint('Alps', 'baseOctaves'),
+                'detail_octaves': config.getint('Alps', 'detailOctaves'),
+                'seed': config.getint('Alps', 'seed'),
+                'noise_scale': config.getfloat('Alps', 'noiseScale'),
+                'disp_scale': config.getfloat('Alps', 'dispScale'),
+                'base_abs': config.getfloat('Alps', 'baseABS'),
+                'detail_abs': config.getfloat('Alps', 'detailABS'),
+                'slope_ctrl': config.getfloat('Alps', 'slopeCtrl'),
+            }
+            print("read parameters")
+
+            print("updating ui elements")
+            # Update UI elements with parameter values
+            cmds.intFieldGrp(self.scale_field, edit=True, value1=parameters['width'], value2=parameters['height'])
+            cmds.intFieldGrp(self.octave_field, edit=True, value1=parameters['base_octaves'], value2=parameters['detail_octaves'])
+            cmds.intFieldGrp(self.seed_field, edit=True, value1=parameters['seed'])
+            cmds.floatFieldGrp(self.noise_scale_field, edit=True, value1=parameters['noise_scale'])
+            cmds.floatFieldGrp(self.disp_scale_field, edit=True, value1=parameters['disp_scale'])
+            cmds.floatFieldGrp(self.ABS_control_field, edit=True, value1=parameters['base_abs'], value2=parameters['detail_abs'])
+            cmds.floatFieldGrp(self.slope_control_field, edit=True, value1=parameters['slope_ctrl'])
+            print("finished update ui elements")
+        else:
+            print("'Alps' section not found in the config file.")
+
+
+
+
+    #  parameters = [width, height, base_octaves, detail_octaves, seed, noise_scale, disp_scale, base_abs, detail_abs, slope_ctrl, is_feathered]
 
         
+    def write_config_btn_active(self, *args):
+        print("write_config_btn_active function called")
+        config = ConfigParser()
+        self.config_file_path = "/home/s5609424/Programming/HeightmapPythonScript/config.ini"
+    
+        # Create the file if it doesn't exist yet
+        with open(self.config_file_path, 'w') as f:
+            pass
+    
+        # Add section 'Alps'
+        if not config.has_section('Alps'):
+            config.add_section('Alps')
+    
+        # Set options under section 'Alps'
+        config.set('Alps', 'width', '720')
+        config.set('Alps', 'height', '720')
+        config.set('Alps', 'baseOctaves', '4')
+        config.set('Alps', 'detailOctaves', '10')
+        config.set('Alps', 'seed', '56456')
+        config.set('Alps', 'noiseScale', '512.0')
+        config.set('Alps', 'dispScale', '3')
+        config.set('Alps', 'baseABS', '1')
+        config.set('Alps', 'detailABS', '0.6')
+        config.set('Alps', 'slopeCtrl', '0.3')
+    
+        # Write the updated configuration to file
+        with open(self.config_file_path, 'w') as f:
+            config.write(f)
+            print('config written')
+
     def generate_terrain_btn_active(self, *args):
         width = cmds.intFieldGrp(self.scale_field, query=True, value=True)[0]
         height = cmds.intFieldGrp(self.scale_field, query=True, value=True)[1]
@@ -59,7 +139,7 @@ class UI:
         slopeCtrl = cmds.floatFieldGrp(self.slope_control_field, query=True, value=True)[0]
         isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True) 
         self.terrain = Terrain(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered)
-        
+    
     def edit_heightmap_btn_active(self, *args):
                
         self.terrain.delPlane()
@@ -75,16 +155,17 @@ class UI:
         baseABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[0]
         detailABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[1]
         slopeCtrl = cmds.floatFieldGrp(self.slope_control_field, query=True, value=True)[0]
-        isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True)  
-
+        isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True)          
+        
         # Update the Terrain instance with the new parameters
         self.terrain.__init__(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered)
         
+
         
 class Terrain:
     def __init__(self, width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered):
         self.width = width
-        self.height = height
+        self.height = height    
         self.seed = seed
         self.noiseScale = noiseScale
         self.dispScale = dispScale
@@ -102,11 +183,11 @@ class Terrain:
       #  plt.imshow(self.heightmap, cmap='gray', interpolation='none')
        # plt.axis('off')  # Turn off axis
 
-        self.save_heightmap_exr(self.heightmap, '/home/s5609424/Pictures/heightmap.exr')
-        # plt.savefig('C:/Users/tomme/Pictures/heightmap.exr', bbox_inches='tight', pad_inches=0)  # Save the image without extra padding
+        self.write_heightmap_exr(self.heightmap, '/home/s5609424/Programming/HeightmapPythonScript/heightmap.exr')
+        # plt.writefig('C:/Users/tomme/Pictures/heightmap.exr', bbox_inches='tight', pad_inches=0)  # write the image without extra padding
         # plt.show()
 
-        self.noise_path = '/home/s5609424/Pictures/heightmap.exr'
+        self.noise_path = '/home/s5609424/Programming/HeightmapPythonScript/heightmap.exr'
         self.genPlane(self.noise_path, dispScale)
         
     # for stuff outside 
@@ -212,7 +293,7 @@ class Terrain:
         # Apply the mask to the heightmap
         feathered_heightmap = heightmap * mask
         
-    def save_heightmap_exr(self, heightmap, filepath):
+    def write_heightmap_exr(self, heightmap, filepath):
         # Ensure heightmap is in the range [0, 1]
         heightmap = np.clip(heightmap, 0, 1)
 
