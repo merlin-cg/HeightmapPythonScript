@@ -8,14 +8,14 @@ from opensimplex import OpenSimplex
 import math
 import platform
 import OpenEXR, Imath
-
+from scipy.ndimage import gaussian_filter
 
 
 class UI:
     def __init__(self):
         
         window = "terrain_window"
-        title = "Terragen"
+        title = "Terragains"
         size = (720, 540)
         self.plane = None
         
@@ -35,12 +35,16 @@ class UI:
         self.ABS_control_field = cmds.floatFieldGrp(numberOfFields=2, label='ABS control', value1=1.1, value2=1.0)
         self.slope_control_field = cmds.floatFieldGrp(numberOfFields=1, label='Slope', value1=0.25)        
         self.feathering_toggle = cmds.checkBox(label='Feathering')
+        self.feathering_amount = cmds.intFieldGrp(numberOfFields=1, label='Feathering Amount', value1=50)
+
         
         
-        cmds.button (label='Generate Terrain', command=self.generate_terrain_btn_active)
+        cmds.button(label='Generate Terrain', command=self.generate_terrain_btn_active)
         cmds.button(label='Edit Heightmap', command=self.edit_heightmap_btn_active)
-                
-        cmds.showWindow()
+
+        # Create the falloff curve UI element
+        cmds.showWindow()  
+
         
     def generate_terrain_btn_active(self, *args):
         width = cmds.intFieldGrp(self.scale_field, query=True, value=True)[0]
@@ -53,8 +57,7 @@ class UI:
         baseABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[0]
         detailABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[1]    
         slopeCtrl = cmds.floatFieldGrp(self.slope_control_field, query=True, value=True)[0]
-        isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True)[0]
-        
+        isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True) 
         self.terrain = Terrain(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered)
         
     def edit_heightmap_btn_active(self, *args):
@@ -72,8 +75,7 @@ class UI:
         baseABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[0]
         detailABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[1]
         slopeCtrl = cmds.floatFieldGrp(self.slope_control_field, query=True, value=True)[0]
-        isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True)[0]
-
+        isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True)  
 
         # Update the Terrain instance with the new parameters
         self.terrain.__init__(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered)
@@ -91,9 +93,10 @@ class Terrain:
         self.slopeCtrl = slopeCtrl
         self.baseOctaves = baseOctaves
         self.detailOctaves = detailOctaves
+        self.isFeathered = isFeathered
         self.heightmap = self.create_heightmap(self.width, self.height, self.seed, self.noiseScale, self.baseABS, self.detailABS, self.slopeCtrl, self.baseOctaves, self.detailOctaves, self.isFeathered)
         self.plane = None # Initialize plane attribute for editing heightmap
-        self.isFeathered = isFeathered
+
         
        # plt.figure(figsize=(width / 100, height / 100)) 
       #  plt.imshow(self.heightmap, cmap='gray', interpolation='none')
@@ -107,13 +110,14 @@ class Terrain:
         self.genPlane(self.noise_path, dispScale)
         
     # for stuff outside 
-    def create_heightmap(self, width, height, seed, noiseScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves):
+    def create_heightmap(self, width, height, seed, noiseScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered):
         
         # Create a Perlin noise object
         noise_generator = OpenSimplex(seed=self.seed)
         
         # Create a 2D array of floats
         heightmap = np.zeros((width, height), dtype=float)
+
         # Generate Perlin noise and assign it to the heightmap
         for i in range(height):
             for j in range(width):
@@ -143,7 +147,7 @@ class Terrain:
     
         # Normalize the heightmap to the range [0, 1]
         heightmap -= heightmap.min()
-        heightmap /= heightmap.max() 
+        heightmap /= heightmap.max()
         # Normalize the detail noise
         detail_noise -= detail_noise.min()
         detail_noise /= detail_noise.max()
@@ -154,26 +158,59 @@ class Terrain:
         # heightmap = 1 - heightmap
         
         if isFeathered == True:
-            self.apply_feathering(heightmap)
+            heightmap = self.apply_feathering(heightmap)
+            
         return heightmap
+        
+            
+    def apply_feathering(self, heightmap):
+        # Define feathering width
+        feather_width = 100
+        #feather_falloff == True
+        #feather_falloff_outer == False
+        # Create an empty mask
+        mask = np.zeros_like(heightmap)
+        
+       # falloff_curve_values = cmds.getAttr(self.falloff_curve + '.curve')
 
-    def apply_feathering(self, heightmap, sigma=10):
-    # Create a Gaussian mask for feathering
-    mask = np.zeros_like(heightmap)
-    mask[:5, :] = np.linspace(1, 0, 5)  # Feathering down from 1 to 0 over the first 5 rows
-    mask[-5:, :] = np.linspace(0, 1, 5)  # Feathering up from 0 to 1 over the last 5 rows
-    mask[:, :5] *= np.linspace(1, 0, 5)[:, np.newaxis]  # Feathering from 1 to 0 over the first 5 columns
-    mask[:, -5:] *= np.linspace(0, 1, 5)[:, np.newaxis]  # Feathering from 0 to 1 over the last 5 columns
+        # Calculate the step size for feathering
+        # feather_step_size = 1 / feather_width
+        
+        # Normalize falloff curve values to [0, 1]
+        #falloff_curve_values -= falloff_curve_values.min()
+        #falloff_curve_values /= falloff_curve_values.max()
+        
+        # Generate progressively brighter squares
+        for i in range(1, feather_width + 1):
+            #calculate the exponential step size
+            
+            
+                #feather_step_size = (1 - np.exp(-i)) / (1 - np.exp(-feather_width))
+                feather_step_size = np.exp(-i / feather_width)          
 
-    # Apply Gaussian blur to the mask for smooth feathering
-    mask = gaussian_filter(mask, sigma=sigma)
+        
+                # Slice the mask array to create a smaller square
+                sliced_mask = mask[i:-i, i:-i]
+                # Add the feather step size to the center of the sliced mask
+                sliced_mask += feather_step_size
+            
+        # Normalize the mask to ensure the maximum value is 1
+        mask /= np.max(mask)
 
-    # Apply the mask to the heightmap
-    heightmap = heightmap * mask
+        return heightmap * mask
+        
+    def apply_feathering_old(self, heightmap):
+    # Create a mask for feathering
+        mask = np.ones_like(heightmap)
+        mask[:feather_width, :] *= np.linspace(0, 1, feather_width)[:, np.newaxis]
+        mask[-feather_width:, :] *= np.linspace(1, 0, feather_width)[:, np.newaxis]
+        mask[:, :feather_width] *= np.linspace(0, 1, feather_width)[np.newaxis, :]
+        mask[:, -feather_width:] *= np.linspace(1, 0, feather_width)[np.newaxis, :]
 
-    return heightmap
+        mask = gaussian_filter(mask, sigma=sigma)
     
-
+        # Apply the mask to the heightmap
+        feathered_heightmap = heightmap * mask
         
     def save_heightmap_exr(self, heightmap, filepath):
         # Ensure heightmap is in the range [0, 1]
@@ -194,6 +231,8 @@ class Terrain:
         # Close the EXR file
         exr_file.close()
 
+
+        
 
 
     # Generate plane and assign heightmap to displacement shader
