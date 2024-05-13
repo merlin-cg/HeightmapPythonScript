@@ -1,5 +1,6 @@
 import maya.cmds as cmds
 import maya.mel as mel
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -20,10 +21,8 @@ class UI:
         size = (720, 540)
         self.plane = None
         
-        self.config_selection = cmds.optionMenu(label='Choose config', changeCommand=self.update_active_section)
         self.config = ConfigParser()
-        self.config_file_path = "/home/s5609424/Programming/HeightmapPythonScript/config.ini"
-        self.active_section = None
+        self.selected_config = None
         
         if cmds.window(window, exists=True):
             cmds.deleteUI(window, window=True)
@@ -31,8 +30,9 @@ class UI:
         #create ui    
         window = cmds.window(window, title=title,widthHeight=size)
         main_layout = cmds.columnLayout(adjustableColumn=True)
-                
+        
         #fields
+        self.user_file_path_field = cmds.textFieldGrp(label='Operating File Path')
         self.scale_field = cmds.intFieldGrp(numberOfFields=2, label='Dimensions', value1=400, value2=400)
         self.octave_field = cmds.intFieldGrp(numberOfFields=2, label='Base & Detail Octaves', value1=4, value2=10)
         self.seed_field = cmds.intFieldGrp(numberOfFields=1, label='Seed', value1=56456)
@@ -44,40 +44,66 @@ class UI:
         self.feathering_amount = cmds.intFieldGrp(numberOfFields=1, label='Feathering Amount', value1=50)
         self.config_selection = cmds.optionMenu(label='Choose config')
         
-        self.config.read([self.config_file_path]) 
 
-        for section in self.config.sections():
-            cmds.menuItem(label=section, parent=self.config_selection) 
-            
-
+        cmds.button(label='Update Path', command=self.update_working_file_path)
         cmds.button(label='Load Config', command=self.load_config_btn_active)
         cmds.button(label='Write Config', command=self.write_config_btn_active)
 
         cmds.button(label='Generate Terrain', command=self.generate_terrain_btn_active)
         cmds.button(label='Edit Heightmap', command=self.edit_heightmap_btn_active)
 
-        cmds.showWindow()  
-            
-    def load_config_btn_active(self, config_file_path):
-        config = ConfigParser()
 
-        print(self.config_file_path)
-        if config.has_section(selected_config):
+            
+        cmds.showWindow()  
+        
+
+            
+    def update_working_file_path(self, *args):
+        print("updating_working_file_path")
+        self.working_file_path = cmds.textFieldGrp(self.user_file_path_field, query=True, text=True)
+        self.config_file_path = self.working_file_path + 'config.ini'
+        print("config file path is: " + self.config_file_path)
+        self.read_config_file()
+    
+    def read_config_file(self):
+        cmds.optionMenu(self.config_selection, edit=True, q = True)
+        self.delete_menu_items() # delete all items if any already exist
+        self.config.read([self.config_file_path])
+        for section in self.config.sections():
+            cmds.menuItem(label=section, parent=self.config_selection) 
+            print("added config section" + section)
+    
+    def delete_menu_items(self, *args):
+        config_selection_list = cmds.optionMenu(self.config_selection, q=True, itemListLong=True) # itemListLong returns the children
+        if config_selection_list:
+            cmds.deleteUI(config_selection_list)
+        else:
+            return
+        
+    def load_config_btn_active(self, *args):
+        
+       # self.config.read('config.ini')
+        self.selected_config = cmds.optionMenu(self.config_selection, q=True, value=True)
+        
+        print("using" + self.selected_config + "from" + self.config_file_path)
+
+        if self.config.has_section(self.selected_config):
+            print("updating parameters")
             parameters = {
-                'width': config.getint('Alps', 'width'),
-                'height': config.getint('Alps', 'height'),
-                'base_octaves': config.getint('Alps', 'baseOctaves'),
-                'detail_octaves': config.getint('Alps', 'detailOctaves'),
-                'seed': config.getint('Alps', 'seed'),
-                'noise_scale': config.getfloat('Alps', 'noiseScale'),
-                'disp_scale': config.getfloat('Alps', 'dispScale'),
-                'base_abs': config.getfloat('Alps', 'baseABS'),
-                'detail_abs': config.getfloat('Alps', 'detailABS'),
-                'slope_ctrl': config.getfloat('Alps', 'slopeCtrl'),
+                'width': self.config.getint(self.selected_config, 'width'),
+                'height': self.config.getint(self.selected_config, 'height'),
+                'base_octaves': self.config.getint(self.selected_config, 'baseOctaves'),
+                'detail_octaves': self.config.getint(self.selected_config, 'detailOctaves'),
+                'seed': self.config.getint(self.selected_config, 'seed'),
+                'noise_scale': self.config.getfloat(self.selected_config, 'noiseScale'),
+                'disp_scale': self.config.getfloat(self.selected_config, 'dispScale'),
+                'base_abs': self.config.getfloat(self.selected_config, 'baseABS'),
+                'detail_abs': self.config.getfloat(self.selected_config, 'detailABS'),
+                'slope_ctrl': self.config.getfloat(self.selected_config, 'slopeCtrl'),
             }
             print("read parameters")
 
-            print("updating ui elements")
+            print("updating ui elements with new parameters")
             # Update UI elements with parameter values
             cmds.intFieldGrp(self.scale_field, edit=True, value1=parameters['width'], value2=parameters['height'])
             cmds.intFieldGrp(self.octave_field, edit=True, value1=parameters['base_octaves'], value2=parameters['detail_octaves'])
@@ -88,7 +114,7 @@ class UI:
             cmds.floatFieldGrp(self.slope_control_field, edit=True, value1=parameters['slope_ctrl'])
             print("finished update ui elements")
         else:
-            print("'Alps' section not found in the config file.")
+            print("self.selected_config section not found in the config file.")
 
 
 
@@ -99,13 +125,13 @@ class UI:
     def write_config_btn_active(self, *args):
         print("write_config_btn_active function called")
         config = ConfigParser()
-        self.config_file_path = "/home/s5609424/Programming/HeightmapPythonScript/config.ini"
+        self.config_file_path = self.working_file_path + 'config.ini'
     
         # Create the file if it doesn't exist yet
         with open(self.config_file_path, 'w') as f:
             pass
     
-        # Add section 'Alps'
+        # Add default config 'Alps'
         if not config.has_section('Alps'):
             config.add_section('Alps')
     
@@ -125,6 +151,8 @@ class UI:
         with open(self.config_file_path, 'w') as f:
             config.write(f)
             print('config written')
+            
+        
 
     def generate_terrain_btn_active(self, *args):
         width = cmds.intFieldGrp(self.scale_field, query=True, value=True)[0]
@@ -138,7 +166,8 @@ class UI:
         detailABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[1]    
         slopeCtrl = cmds.floatFieldGrp(self.slope_control_field, query=True, value=True)[0]
         isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True) 
-        self.terrain = Terrain(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered)
+        workingFilePath = self.working_file_path
+        self.terrain = Terrain(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered, workingFilePath)
     
     def edit_heightmap_btn_active(self, *args):
                
@@ -156,14 +185,15 @@ class UI:
         detailABS = cmds.floatFieldGrp(self.ABS_control_field, query=True, value=True)[1]
         slopeCtrl = cmds.floatFieldGrp(self.slope_control_field, query=True, value=True)[0]
         isFeathered = cmds.checkBox(self.feathering_toggle, query=True, value=True)          
+        workingFilePath = self.working_file_path
         
         # Update the Terrain instance with the new parameters
-        self.terrain.__init__(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered)
+        self.terrain.__init__(width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered, workingFilePath)
         
 
         
 class Terrain:
-    def __init__(self, width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered):
+    def __init__(self, width, height, seed, noiseScale, dispScale, baseABS, detailABS, slopeCtrl, baseOctaves, detailOctaves, isFeathered, workingFilePath):
         self.width = width
         self.height = height    
         self.seed = seed
@@ -175,6 +205,7 @@ class Terrain:
         self.baseOctaves = baseOctaves
         self.detailOctaves = detailOctaves
         self.isFeathered = isFeathered
+        self.workingFilePath = workingFilePath
         self.heightmap = self.create_heightmap(self.width, self.height, self.seed, self.noiseScale, self.baseABS, self.detailABS, self.slopeCtrl, self.baseOctaves, self.detailOctaves, self.isFeathered)
         self.plane = None # Initialize plane attribute for editing heightmap
 
@@ -182,12 +213,12 @@ class Terrain:
        # plt.figure(figsize=(width / 100, height / 100)) 
       #  plt.imshow(self.heightmap, cmap='gray', interpolation='none')
        # plt.axis('off')  # Turn off axis
+        self.noise_path = workingFilePath + 'heightmap.exr'
 
-        self.write_heightmap_exr(self.heightmap, '/home/s5609424/Programming/HeightmapPythonScript/heightmap.exr')
+        self.write_heightmap_exr(self.heightmap, workingFilePath)
         # plt.writefig('C:/Users/tomme/Pictures/heightmap.exr', bbox_inches='tight', pad_inches=0)  # write the image without extra padding
         # plt.show()
 
-        self.noise_path = '/home/s5609424/Programming/HeightmapPythonScript/heightmap.exr'
         self.genPlane(self.noise_path, dispScale)
         
     # for stuff outside 
@@ -301,7 +332,7 @@ class Terrain:
         exr_header = OpenEXR.Header(heightmap.shape[1], heightmap.shape[0])
         exr_header['compression'] = Imath.Compression(Imath.Compression.NO_COMPRESSION)
         exr_header['channels'] = {'R': Imath.Channel(Imath.PixelType(Imath.PixelType.FLOAT))}
-        exr_file = OpenEXR.OutputFile(filepath, exr_header)
+        exr_file = OpenEXR.OutputFile(filepath + 'heightmap.exr', exr_header)
 
         # Convert heightmap data to bytes
         exr_data = heightmap.astype(np.float32).tobytes()  # Convert heightmap to 32-bit floating point and convert to bytes
