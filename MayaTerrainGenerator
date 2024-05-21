@@ -1,0 +1,150 @@
+import maya.cmds as cmds
+
+class UIManager:
+    def __init__(self, update_callback):
+        self.update_callback = update_callback
+        self.create_ui()
+
+    def create_ui(self):
+        window = "terrain_window"
+        title = "Terragains"
+        size = (900, 540)
+
+        if cmds.window(window, exists=True):
+            cmds.deleteUI(window, window=True)
+
+        # Create UI window
+        window = cmds.window(window, title=title, widthHeight=size)
+        main_layout = cmds.columnLayout(adjustableColumn=True)
+
+        # Path field
+        self.user_file_path_field = cmds.textFieldGrp(
+            label='Working File Path "/path/to/"', ebg=True, hlc=[0.247, 0.682, 0.616]
+        )
+        cmds.button(
+            label='Update Path', bgc=[0.137, 0.169, 0.169], command=self.update_callback, hlc=[0.247, 0.682, 0.616]
+        )
+
+        # Parameter fields
+        self.resolution_field = cmds.intSliderGrp(
+            label='Resolution', bgc=[0.004, 0.2, 0.2], ebg=True, field=True,
+            minValue=100, maxValue=1080, fieldMinValue=100, fieldMaxValue=2048,
+            value=200, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.base_octave_field = cmds.intFieldGrp(
+            numberOfFields=1, label='Base Octaves', bgc=[0.004, 0.2, 0.2], ebg=True,
+            value1=4, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.detail_octave_field = cmds.intFieldGrp(
+            numberOfFields=1, label='Detail Octaves', bgc=[0.004, 0.2, 0.2], ebg=True,
+            value1=10, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.seed_field = cmds.intSliderGrp(
+            label='Noise Seed', bgc=[0.004, 0.2, 0.2], ebg=True, field=True,
+            minValue=1, maxValue=99999, fieldMinValue=1, fieldMaxValue=99999,
+            value=56456, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.noise_scale_field = cmds.floatFieldGrp(
+            numberOfFields=1, label='Noise Scale', bgc=[0.004, 0.2, 0.2], ebg=True,
+            value1=100.0, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.disp_scale_field = cmds.floatFieldGrp(
+            numberOfFields=1, label='Height Displacement Scale', bgc=[0.004, 0.2, 0.2], ebg=True,
+            precision=2, value1=3.0, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.base_abs_field = cmds.floatFieldGrp(
+            numberOfFields=1, label='Base ABS', bgc=[0.004, 0.2, 0.2], ebg=True,
+            precision=3, value1=1.1, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.detail_abs_field = cmds.floatFieldGrp(
+            numberOfFields=1, label='Detail ABS', bgc=[0.004, 0.2, 0.2], ebg=True,
+            precision=3, value1=1.0, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.slope_ctrl_field = cmds.floatFieldGrp(
+            numberOfFields=1, label='Slope Control', bgc=[0.004, 0.2, 0.2], ebg=True,
+            precision=3, value1=0.25, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.feathering_toggle = cmds.checkBox(
+            label='Feathering', bgc=[0.004, 0.2, 0.2], ebg=True, value=True,
+            hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+        self.feathering_scale_slider = cmds.intSliderGrp(
+            label='Feathering Scale', bgc=[0.004, 0.2, 0.2], ebg=True, field=True,
+            minValue=1, maxValue=500, fieldMinValue=1, fieldMaxValue=500,
+            value=50, hlc=[0.247, 0.682, 0.616], changeCommand=self.update_callback
+        )
+
+        # Config management
+        self.config_selection = cmds.optionMenu(
+            label='Choose config', bgc=[0.004, 0.2, 0.2], ebg=False, hlc=[0.196, 0.471, 0.451]
+        )
+        cmds.button(label='Load Config', bgc=[0.004, 0.2, 0.2], command=self.load_config_btn_active)
+        self.config_save_name_field = cmds.textFieldGrp(
+            label='New Config Name', bgc=[0.169, 0.169, 0.169], ebg=False, hlc=[0.631, 0.333, 0.333]
+        )
+        cmds.button(
+            label='Save New Config', bgc=[0.169, 0.169, 0.169], hlc=[0.631, 0.333, 0.333],
+            command=self.write_config_btn_active
+        )
+
+        cmds.showWindow(window)
+
+    def get_parameters(self):
+        # Retrieve parameters from UI elements
+        return {
+            'working_file_path': cmds.textFieldGrp(self.user_file_path_field, query=True, text=True),
+            'resolution': cmds.intSliderGrp(self.resolution_field, query=True, value=True),
+            'base_octaves': cmds.intFieldGrp(self.base_octave_field, query=True, value1=True),
+            'detail_octaves': cmds.intFieldGrp(self.detail_octave_field, query=True, value1=True),
+            'seed': cmds.intSliderGrp(self.seed_field, query=True, value=True),
+            'noise_scale': cmds.floatFieldGrp(self.noise_scale_field, query=True, value1=True),
+            'disp_scale': cmds.floatFieldGrp(self.disp_scale_field, query=True, value1=True),
+            'base_abs': cmds.floatFieldGrp(self.base_abs_field, query=True, value1=True),
+            'detail_abs': cmds.floatFieldGrp(self.detail_abs_field, query=True, value1=True),
+            'slope_ctrl': cmds.floatFieldGrp(self.slope_ctrl_field, query=True, value1=True),
+            'is_feathered': cmds.checkBox(self.feathering_toggle, query=True, value=True),
+            'feathering_amount': cmds.intSliderGrp(self.feathering_scale_slider, query=True, value=True)
+        }
+
+    def set_parameters(self, params):
+        # Update UI elements with parameters
+        cmds.textFieldGrp(self.user_file_path_field, edit=True, text=params['working_file_path'])
+        cmds.intSliderGrp(self.resolution_field, edit=True, value=params['resolution'])
+        cmds.intFieldGrp(self.base_octave_field, edit=True, value1=params['base_octaves'])
+        cmds.intFieldGrp(self.detail_octave_field, edit=True, value1=params['detail_octaves'])
+        cmds.intSliderGrp(self.seed_field, edit=True, value=params['seed'])
+        cmds.floatFieldGrp(self.noise_scale_field, edit=True, value1=params['noise_scale'])
+        cmds.floatFieldGrp(self.disp_scale_field, edit=True, value1=params['disp_scale'])
+        cmds.floatFieldGrp(self.base_abs_field, edit=True, value1=params['base_abs'])
+        cmds.floatFieldGrp(self.detail_abs_field, edit=True, value1=params['detail_abs'])
+        cmds.floatFieldGrp(self.slope_ctrl_field, edit=True, value1=params['slope_ctrl'])
+        cmds.checkBox(self.feathering_toggle, edit=True, value=params['is_feathered'])
+        cmds.intSliderGrp(self.feathering_scale_slider, edit=True, value=params['feathering_amount'])
+
+    def update_working_file_path(self, *args):
+        # Placeholder method for updating the working file path
+        pass
+
+    def load_config_btn_active(self, *args):
+        # Placeholder method for loading configuration
+        pass
+
+    def write_config_btn_active(self, *args):
+        # Placeholder method for writing configuration
+        pass
+
+# Main function
+def main():
+    terrain_generator = TerrainGenerator()
+    file_manager = FileManager()
+
+    def update_terrain(*args):
+        params = ui.get_parameters()
+        heightmap = terrain_generator.generate(params)
+        file_manager.save_heightmap(heightmap, params['working_file_path'])
+        MayaIntegration.update_plane_with_heightmap(heightmap)
+
+    ui = UIManager(update_terrain)
+
+if __name__ == "__main__":
+    main()
